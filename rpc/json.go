@@ -223,7 +223,7 @@ func (c *jsonCodec) readBatch() (messages []*jsonrpcMessage, batch bool, err err
 	// This verifies basic syntax, etc.
 	var rawmsg json.RawMessage
 	if err := c.decode(&rawmsg); err != nil {
-		return nil, false, err
+		return nil, false, fmt.Errorf("err: %w, rawmsg: %v", err, rawmsg)
 	}
 	messages, batch = parseMessage(rawmsg)
 	for i, msg := range messages {
