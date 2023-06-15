@@ -2556,15 +2556,36 @@ func (bc *BlockChain) ValidatePayload(block *types.Block, feeRecipient common.Ad
 		return err
 	}
 
-	// First just check the balance delta to see if it matches.
 	balanceAfter := statedb.GetBalance(feeRecipient)
-	feeRecipientDiff := new(big.Int).Sub(balanceAfter, balanceBefore)
+	feeRecipientProfit := new(big.Int).Sub(balanceAfter, balanceBefore)
+
+	// make adjustments to fee recipient profit if block includes txs to/from fee recipient
+	blockTxs := block.Transactions()
+	for index, receipt := range receipts {
+
+		txFailed := receipt.Status == types.ReceiptStatusFailed
+		tx := blockTxs[index]
+
+		gasTip, err := tx.EffectiveGasTip(block.BaseFee())
+		if err != nil {
+			return fmt.Errorf("cannot calculate gas tip, error: %s", err.Error())
+		}
+
+		gasUsed := new(big.Int).SetUint64(receipt.GasUsed)
+		effectiveGasFees := new(big.Int).Mul(gasTip, gasUsed)
+		if receipt.From == feeRecipient {
+			feeRecipientProfit = feeRecipientProfit.Add(feeRecipientProfit, effectiveGasFees) // outgoing tx, add gas back to validator balance diff
+			if !txFailed {
+				feeRecipientProfit = feeRecipientProfit.Add(feeRecipientProfit, tx.Value()) // outgoing tx, add value back to validator balance diff
+			}
+		}
+	}
 
 	// If diff is sufficiently large, just return success.
-	if feeRecipientDiff.Cmp(expectedProfit) >= 0 {
+	if feeRecipientProfit.Cmp(expectedProfit) >= 0 {
 		return nil
 	}
-	log.Warn(fmt.Sprintf("fee recipient diff %s is less than expected %s. checking for last transaction", feeRecipientDiff.String(), expectedProfit.String()))
+	log.Warn(fmt.Sprintf("fee recipient diff %s is less than expected %s. checking for last transaction", feeRecipientProfit.String(), expectedProfit.String()))
 
 	// Flashbots logic for last transaction checks.
 	if len(receipts) == 0 {
