@@ -2559,7 +2559,7 @@ func (bc *BlockChain) ValidatePayload(block *types.Block, feeRecipient common.Ad
 	balanceAfter := statedb.GetBalance(feeRecipient)
 	feeRecipientProfit := new(big.Int).Sub(balanceAfter, balanceBefore)
 
-	// make adjustments to fee recipient profit if block includes txs to/from fee recipient
+	// make adjustments to fee recipient profit if block includes txs from fee recipient
 	blockTxs := block.Transactions()
 	for index, receipt := range receipts {
 
