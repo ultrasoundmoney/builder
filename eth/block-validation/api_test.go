@@ -213,7 +213,7 @@ func TestValidateBuilderSubmissionV2(t *testing.T) {
 				ProposerFeeRecipient: proposerAddr,
 				GasLimit:             execData.GasLimit,
 				GasUsed:              execData.GasUsed,
-				Value:                uint256.NewInt(0),
+				Value:                uint256.NewInt(149842511727213),
 			},
 			ExecutionPayload: payload,
 		},
