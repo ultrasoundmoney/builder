@@ -15,9 +15,9 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/google/uuid"
 
 	boostTypes "github.com/flashbots/go-boost-utils/types"
+	"github.com/google/uuid"
 )
 
 // Register adds catalyst APIs to the full node.
@@ -92,8 +92,6 @@ func (api *BlockValidationAPI) ValidateBuilderSubmissionV1(params *BuilderBlockV
 	return nil
 }
 
-
-
 type BuilderBlockValidationRequestV2 struct {
 	capellaapi.SubmitBlockRequest
 	RegisteredGasLimit uint64      `json:"registered_gas_limit,string"`
@@ -139,7 +137,6 @@ func CompareMessageAndBlock(params *BuilderBlockValidationRequestV2, block *type
 	}
 	return nil
 }
-
 
 func (api *BlockValidationAPI) ValidateBuilderSubmissionV2(params *BuilderBlockValidationRequestV2) error {
 	start := time.Now()
@@ -187,4 +184,3 @@ func (api *BlockValidationAPI) ValidateBuilderSubmissionV2(params *BuilderBlockV
 	log.Info("validated block", "hash", block.Hash(), "number", block.NumberU64(), "parentHash", block.ParentHash(), "time_elapsed", time.Since(start), "requestId", requestId)
 	return nil
 }
-

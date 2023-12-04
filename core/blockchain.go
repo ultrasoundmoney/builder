@@ -29,7 +29,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/lru"
 	"github.com/ethereum/go-ethereum/common/mclock"
@@ -50,6 +49,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/google/uuid"
 )
 
 var (
@@ -2498,7 +2498,7 @@ func (bc *BlockChain) SetBlockValidatorAndProcessorForTesting(v Validator, p Pro
 func (bc *BlockChain) ValidatePayload(block *types.Block, feeRecipient common.Address, expectedProfit *big.Int, registeredGasLimit uint64, vmConfig vm.Config, start time.Time, requestId uuid.UUID) error {
 	header := block.Header()
 	if err := bc.engine.VerifyHeader(bc, header, true); err != nil {
-		log.Debug("VerifyHeader failed", "time_elapsed", time.Since(start), "error", err,  "requestId", requestId)
+		log.Debug("VerifyHeader failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
 		return err
 	} else {
 		log.Debug("VerifyHeader succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
@@ -2515,7 +2515,7 @@ func (bc *BlockChain) ValidatePayload(block *types.Block, feeRecipient common.Ad
 
 	parent := bc.GetHeader(block.ParentHash(), block.NumberU64()-1)
 	if parent == nil {
-		log.Debug("GetHeader(Parent) failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId) 
+		log.Debug("GetHeader(Parent) failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
 		return errors.New("parent not found")
 	} else {
 		log.Debug("GetHeader(Parent) succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
@@ -2553,7 +2553,7 @@ func (bc *BlockChain) ValidatePayload(block *types.Block, feeRecipient common.Ad
 		log.Debug("Execute transactions succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
 	}
 
-	err =  nil;
+	err = nil
 	if bc.Config().IsShanghai(header.Time) {
 		if header.WithdrawalsHash == nil {
 			err = fmt.Errorf("withdrawals hash is missing")
@@ -2569,11 +2569,10 @@ func (bc *BlockChain) ValidatePayload(block *types.Block, feeRecipient common.Ad
 	}
 	if err != nil {
 		log.Debug("Check Withdrawal hash failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
-		return err;
+		return err
 	} else {
 		log.Debug("Check Withdrawal hash succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
 	}
-
 
 	if err := bc.validator.ValidateBody(block); err != nil {
 		log.Debug("ValidateBody failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
@@ -2593,7 +2592,7 @@ func (bc *BlockChain) ValidatePayload(block *types.Block, feeRecipient common.Ad
 	balanceAfter := statedb.GetBalance(feeRecipient)
 	feeRecipientDiff := new(big.Int).Sub(balanceAfter, balanceBefore)
 
-	err = CheckProposerPayment(expectedProfit, feeRecipient,feeRecipientDiff, receipts, block)
+	err = CheckProposerPayment(expectedProfit, feeRecipient, feeRecipientDiff, receipts, block)
 	if err != nil {
 		log.Debug("CheckProposerPayment failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
 		return err
