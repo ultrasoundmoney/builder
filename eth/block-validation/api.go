@@ -15,7 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/rpc"
-    "github.com/google/uuid"
+	"github.com/google/uuid"
 
 	boostTypes "github.com/flashbots/go-boost-utils/types"
 )
@@ -51,8 +51,8 @@ type BuilderBlockValidationRequest struct {
 func (api *BlockValidationAPI) ValidateBuilderSubmissionV1(params *BuilderBlockValidationRequest) error {
 	// TODO: fuzztest, make sure the validation is sound
 	// TODO: handle context!
-    start := time.Now()
-    requestId := uuid.New()
+	start := time.Now()
+	requestId := uuid.New()
 
 	if params.ExecutionPayload == nil {
 		return errors.New("nil execution payload")
@@ -137,14 +137,14 @@ func CompareMessageAndBlock(params *BuilderBlockValidationRequestV2, block *type
 	if params.Message.GasUsed != block.GasUsed() {
 		return fmt.Errorf("incorrect GasUsed %d, expected %d", params.Message.GasUsed, block.GasUsed())
 	}
-    return nil
+	return nil
 }
 
 
 func (api *BlockValidationAPI) ValidateBuilderSubmissionV2(params *BuilderBlockValidationRequestV2) error {
-    start := time.Now()
-    requestId := uuid.New()
-    log.Info("ValidateBuilderSubmissionV2 request received", "start", start, "blockHash", params.Message.BlockHash, "requestId", requestId)
+	start := time.Now()
+	requestId := uuid.New()
+	log.Info("ValidateBuilderSubmissionV2 request received", "start", start, "blockHash", params.Message.BlockHash, "requestId", requestId)
 
 	// TODO: fuzztest, make sure the validation is sound
 	// TODO: handle context!
@@ -155,25 +155,25 @@ func (api *BlockValidationAPI) ValidateBuilderSubmissionV2(params *BuilderBlockV
 	payload := params.ExecutionPayload
 	block, err := engine.ExecutionPayloadV2ToBlock(payload)
 	if err != nil {
-        log.Debug("Block parsing failed", "time_elapsed", time.Since(start), "requestId", requestId)
+		log.Debug("Block parsing failed", "time_elapsed", time.Since(start), "requestId", requestId)
 		return err
 	} else {
-        log.Debug("Block parsing succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
-    }
+		log.Debug("Block parsing succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
+	}
 
 	// validated at the relay
 	// isShanghai := api.eth.BlockChain().Config().IsShanghai(params.ExecutionPayload.Timestamp)
 	// if err := verifyWithdrawals(block.Withdrawals(), params.WithdrawalsRoot, isShanghai); err != nil {
-	// 	return err
+	//	return err
 	// }
 
-    err = CompareMessageAndBlock(params, block)
-    if err != nil {
-        log.Debug("Message / Payload comparison failed", "time_elapsed", time.Since(start), "requestId", requestId)
-        return err
-    } else {
-        log.Debug("Message / Payload comparison succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
-    }
+	err = CompareMessageAndBlock(params, block)
+	if err != nil {
+		log.Debug("Message / Payload comparison failed", "time_elapsed", time.Since(start), "requestId", requestId)
+		return err
+	} else {
+		log.Debug("Message / Payload comparison succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
+	}
 
 	feeRecipient := common.BytesToAddress(params.Message.ProposerFeeRecipient[:])
 	expectedProfit := params.Message.Value.ToBig()
