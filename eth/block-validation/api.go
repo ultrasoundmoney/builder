@@ -10,6 +10,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/beacon/engine"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
@@ -88,6 +89,8 @@ func (api *BlockValidationAPI) ValidateBuilderSubmissionV1(params *BuilderBlockV
 	return nil
 }
 
+
+
 type BuilderBlockValidationRequestV2 struct {
 	capellaapi.SubmitBlockRequest
 	RegisteredGasLimit uint64      `json:"registered_gas_limit,string"`
@@ -115,29 +118,7 @@ func (r *BuilderBlockValidationRequestV2) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (api *BlockValidationAPI) ValidateBuilderSubmissionV2(params *BuilderBlockValidationRequestV2) error {
-    var start  = time.Now()
-    log.Info("ValidateBuilderSubmissionV2 request received", "start", start, "blockHash", params.Message.BlockHash)
-
-	// TODO: fuzztest, make sure the validation is sound
-	// TODO: handle context!
-	if params.ExecutionPayload == nil {
-		return errors.New("nil execution payload")
-	}
-
-	payload := params.ExecutionPayload
-	block, err := engine.ExecutionPayloadV2ToBlock(payload)
-    log.Debug("Parse Execution Payload to log", "elapsed", time.Since(start))
-	if err != nil {
-		return err
-	}
-
-	// validated at the relay
-	// isShanghai := api.eth.BlockChain().Config().IsShanghai(params.ExecutionPayload.Timestamp)
-	// if err := verifyWithdrawals(block.Withdrawals(), params.WithdrawalsRoot, isShanghai); err != nil {
-	// 	return err
-	// }
-
+func CompareMessageAndBlock(params *BuilderBlockValidationRequestV2, block *types.Block) error {
 	if params.Message.ParentHash != phase0.Hash32(block.ParentHash()) {
 		return fmt.Errorf("incorrect ParentHash %s, expected %s", params.Message.ParentHash.String(), block.ParentHash().String())
 	}
@@ -153,6 +134,42 @@ func (api *BlockValidationAPI) ValidateBuilderSubmissionV2(params *BuilderBlockV
 	if params.Message.GasUsed != block.GasUsed() {
 		return fmt.Errorf("incorrect GasUsed %d, expected %d", params.Message.GasUsed, block.GasUsed())
 	}
+    return nil
+}
+
+
+func (api *BlockValidationAPI) ValidateBuilderSubmissionV2(params *BuilderBlockValidationRequestV2) error {
+    var start  = time.Now()
+    log.Info("ValidateBuilderSubmissionV2 request received", "start", start, "blockHash", params.Message.BlockHash)
+
+	// TODO: fuzztest, make sure the validation is sound
+	// TODO: handle context!
+	if params.ExecutionPayload == nil {
+		return errors.New("nil execution payload")
+	}
+
+	payload := params.ExecutionPayload
+	block, err := engine.ExecutionPayloadV2ToBlock(payload)
+	if err != nil {
+        log.Debug("Block parsing failed", "time_elapsed", time.Since(start))
+		return err
+	} else {
+        log.Debug("Block parsing succeeded", "time_elapsed", time.Since(start))
+    }
+
+	// validated at the relay
+	// isShanghai := api.eth.BlockChain().Config().IsShanghai(params.ExecutionPayload.Timestamp)
+	// if err := verifyWithdrawals(block.Withdrawals(), params.WithdrawalsRoot, isShanghai); err != nil {
+	// 	return err
+	// }
+
+    err = CompareMessageAndBlock(params, block)
+    if err != nil {
+        log.Debug("Message / Payload comparison failed", "time_elapsed", time.Since(start))
+        return err
+    } else {
+        log.Debug("Message / Payload comparison succeeded", "time_elapsed", time.Since(start))
+    }
 
 	feeRecipient := common.BytesToAddress(params.Message.ProposerFeeRecipient[:])
 	expectedProfit := params.Message.Value.ToBig()
@@ -166,3 +183,4 @@ func (api *BlockValidationAPI) ValidateBuilderSubmissionV2(params *BuilderBlockV
 	log.Info("validated block", "hash", block.Hash(), "number", block.NumberU64(), "parentHash", block.ParentHash())
 	return nil
 }
+
