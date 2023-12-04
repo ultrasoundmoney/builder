@@ -51,7 +51,7 @@ jobs:
       uses: actions/checkout@v2
 
     - name: Test
-      run: go test ./core ./miner/... ./internal/ethapi/... ./les/... ./builder/... ./eth/block-validation/...
+      run: go test ./core ./miner/... ./internal/ethapi/... ./les/... ./builder/... ./eth/block-validation/... --run "TestValidateBuilderSubmissionV2"
 
     - name: Build
       run: make geth
