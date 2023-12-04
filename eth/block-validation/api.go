@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	capellaapi "github.com/attestantio/go-builder-client/api/capella"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -115,13 +116,18 @@ func (r *BuilderBlockValidationRequestV2) UnmarshalJSON(data []byte) error {
 }
 
 func (api *BlockValidationAPI) ValidateBuilderSubmissionV2(params *BuilderBlockValidationRequestV2) error {
+    var start  = time.Now()
+    log.Info("ValidateBuilderSubmissionV2 request received", "start", start, "blockHash", params.Message.BlockHash)
+
 	// TODO: fuzztest, make sure the validation is sound
 	// TODO: handle context!
 	if params.ExecutionPayload == nil {
 		return errors.New("nil execution payload")
 	}
+
 	payload := params.ExecutionPayload
 	block, err := engine.ExecutionPayloadV2ToBlock(payload)
+    log.Debug("Parse Execution Payload to log", "elapsed", time.Since(start))
 	if err != nil {
 		return err
 	}
