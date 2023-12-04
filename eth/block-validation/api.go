@@ -50,6 +50,7 @@ type BuilderBlockValidationRequest struct {
 func (api *BlockValidationAPI) ValidateBuilderSubmissionV1(params *BuilderBlockValidationRequest) error {
 	// TODO: fuzztest, make sure the validation is sound
 	// TODO: handle context!
+    start := time.Now()
 
 	if params.ExecutionPayload == nil {
 		return errors.New("nil execution payload")
@@ -79,7 +80,7 @@ func (api *BlockValidationAPI) ValidateBuilderSubmissionV1(params *BuilderBlockV
 	feeRecipient := common.BytesToAddress(params.Message.ProposerFeeRecipient[:])
 	expectedProfit := params.Message.Value.BigInt()
 
-	err = api.eth.BlockChain().ValidatePayload(block, feeRecipient, expectedProfit, params.RegisteredGasLimit, *api.eth.BlockChain().GetVMConfig())
+	err = api.eth.BlockChain().ValidatePayload(block, feeRecipient, expectedProfit, params.RegisteredGasLimit, *api.eth.BlockChain().GetVMConfig(), start)
 	if err != nil {
 		log.Error("invalid payload", "hash", payload.BlockHash.String(), "number", payload.BlockNumber, "parentHash", payload.ParentHash.String(), "err", err)
 		return err
@@ -139,7 +140,7 @@ func CompareMessageAndBlock(params *BuilderBlockValidationRequestV2, block *type
 
 
 func (api *BlockValidationAPI) ValidateBuilderSubmissionV2(params *BuilderBlockValidationRequestV2) error {
-    var start  = time.Now()
+    start := time.Now()
     log.Info("ValidateBuilderSubmissionV2 request received", "start", start, "blockHash", params.Message.BlockHash)
 
 	// TODO: fuzztest, make sure the validation is sound
@@ -174,7 +175,7 @@ func (api *BlockValidationAPI) ValidateBuilderSubmissionV2(params *BuilderBlockV
 	feeRecipient := common.BytesToAddress(params.Message.ProposerFeeRecipient[:])
 	expectedProfit := params.Message.Value.ToBig()
 
-	err = api.eth.BlockChain().ValidatePayload(block, feeRecipient, expectedProfit, params.RegisteredGasLimit, *api.eth.BlockChain().GetVMConfig())
+	err = api.eth.BlockChain().ValidatePayload(block, feeRecipient, expectedProfit, params.RegisteredGasLimit, *api.eth.BlockChain().GetVMConfig(), start)
 	if err != nil {
 		log.Error("invalid payload", "hash", payload.BlockHash.String(), "number", payload.BlockNumber, "parentHash", payload.ParentHash.String(), "err", err)
 		return err
