@@ -2521,12 +2521,12 @@ func (bc *BlockChain) ValidatePayload(block *types.Block, feeRecipient common.Ad
 		log.Debug("GetHeader(Parent) succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
 	}
 
-	calculatedGasLimit := utils.CalcGasLimit(parent.GasLimit, registeredGasLimit)
-	if calculatedGasLimit != header.GasLimit {
-		log.Debug("CalcGasLimit failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
-		return errors.New("incorrect gas limit set")
+	err = CheckGasLimit(parent.GasLimit, registeredGasLimit, header.GasLimit)
+	if err != nil {
+		log.Debug("CheckGasLimit failed", "time_elapsed", time.Since(start), "error", err)
+		return err
 	} else {
-		log.Debug("CalcGasLimit succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
+		log.Debug("CheckGasLimit succeeded", "time_elapsed", time.Since(start))
 	}
 
 	statedb, err := bc.StateAt(parent.Root)
@@ -2601,6 +2601,22 @@ func (bc *BlockChain) ValidatePayload(block *types.Block, feeRecipient common.Ad
 		log.Debug("CheckProposerPayment succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
 	}
 
+	return nil
+}
+
+func CheckGasLimit(parentGasLimit uint64, registeredGasLimit uint64, headerGasLimit uint64) error {
+	if registeredGasLimit == 0 && headerGasLimit == utils.CalcGasLimit(parentGasLimit, 30_000_000) {
+		// Prysm has a bug where it registers validators with a desired gas limit
+		// of 0. Some builders treat these as desiring gas limit 30_000_000. As a
+		// workaround, whenever the desired gas limit is 0, we accept both the
+		// limit as calculated with a desired limit of 0, and builders which fall
+		// back to calculating with the default 30_000_000.
+	} else {
+		calculatedGasLimit := utils.CalcGasLimit(parentGasLimit, registeredGasLimit)
+		if calculatedGasLimit != headerGasLimit {
+			return fmt.Errorf("incorrect gas limit set, expected: %d, got: %d", calculatedGasLimit, headerGasLimit)
+		}
+	}
 	return nil
 }
 
