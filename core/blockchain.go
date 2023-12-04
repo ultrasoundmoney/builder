@@ -29,6 +29,7 @@ import (
 	"sync/atomic"
 	"time"
 
+    "github.com/google/uuid"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/lru"
 	"github.com/ethereum/go-ethereum/common/mclock"
@@ -2494,46 +2495,46 @@ func (bc *BlockChain) SetBlockValidatorAndProcessorForTesting(v Validator, p Pro
 	bc.processor = p
 }
 
-func (bc *BlockChain) ValidatePayload(block *types.Block, feeRecipient common.Address, expectedProfit *big.Int, registeredGasLimit uint64, vmConfig vm.Config, start time.Time) error {
+func (bc *BlockChain) ValidatePayload(block *types.Block, feeRecipient common.Address, expectedProfit *big.Int, registeredGasLimit uint64, vmConfig vm.Config, start time.Time, requestId uuid.UUID) error {
 	header := block.Header()
 	if err := bc.engine.VerifyHeader(bc, header, true); err != nil {
-        log.Debug("VerifyHeader failed", "time_elapsed", time.Since(start), "error", err)
+        log.Debug("VerifyHeader failed", "time_elapsed", time.Since(start), "error", err,  "requestId", requestId)
         return err
 	} else {
-        log.Debug("VerifyHeader succeeded", "time_elapsed", time.Since(start))
+        log.Debug("VerifyHeader succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
     }
 
 	current := bc.CurrentBlock()
 	reorg, err := bc.forker.ReorgNeeded(current, header)
 	if err == nil && reorg {
-        log.Debug("ReorgNeeded failed", "time_elapsed", time.Since(start), "error", err)
+        log.Debug("ReorgNeeded failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
 		return errors.New("block requires a reorg")
 	} else {
-        log.Debug("ReorgNeeded succeeded", "time_elapsed", time.Since(start))
+        log.Debug("ReorgNeeded succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
     }
 
 	parent := bc.GetHeader(block.ParentHash(), block.NumberU64()-1)
 	if parent == nil {
-        log.Debug("GetHeader(Parent) failed", "time_elapsed", time.Since(start), "error", err)
+        log.Debug("GetHeader(Parent) failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId) 
 		return errors.New("parent not found")
 	} else {
-        log.Debug("GetHeader(Parent) succeeded", "time_elapsed", time.Since(start))
+        log.Debug("GetHeader(Parent) succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
     }
 
 	calculatedGasLimit := utils.CalcGasLimit(parent.GasLimit, registeredGasLimit)
 	if calculatedGasLimit != header.GasLimit {
-        log.Debug("CalcGasLimit failed", "time_elapsed", time.Since(start), "error", err)
+        log.Debug("CalcGasLimit failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
 		return errors.New("incorrect gas limit set")
 	} else {
-        log.Debug("CalcGasLimit succeeded", "time_elapsed", time.Since(start))
+        log.Debug("CalcGasLimit succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
     }
 
 	statedb, err := bc.StateAt(parent.Root)
 	if err != nil {
-        log.Debug("StateAt(parent.Root) failed", "time_elapsed", time.Since(start), "error", err)
+        log.Debug("StateAt(parent.Root) failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
 		return err
 	} else {
-        log.Debug("StateAt(parent.Root) succeeded", "time_elapsed", time.Since(start))
+        log.Debug("StateAt(parent.Root) succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
     }
 
 	// The chain importer is starting and stopping trie prefetchers. If a bad
@@ -2546,10 +2547,10 @@ func (bc *BlockChain) ValidatePayload(block *types.Block, feeRecipient common.Ad
 
 	receipts, _, usedGas, err := bc.processor.Process(block, statedb, vmConfig)
     if err != nil {
-        log.Debug("Execute transactions failed", "time_elapsed", time.Since(start), "error", err)
+        log.Debug("Execute transactions failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
         return err
     } else {
-        log.Debug("Execute transactions succeeded", "time_elapsed", time.Since(start))
+        log.Debug("Execute transactions succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
     }
 
     err =  nil;
@@ -2567,25 +2568,25 @@ func (bc *BlockChain) ValidatePayload(block *types.Block, feeRecipient common.Ad
 		}
 	}
     if err != nil {
-        log.Debug("Check Withdrawal hash failed", "time_elapsed", time.Since(start), "error", err)
+        log.Debug("Check Withdrawal hash failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
         return err;
     } else {
-        log.Debug("Check Withdrawal hash succeeded", "time_elapsed", time.Since(start))
+        log.Debug("Check Withdrawal hash succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
     }
 
 
 	if err := bc.validator.ValidateBody(block); err != nil {
-        log.Debug("ValidateBody failed", "time_elapsed", time.Since(start), "error", err)
+        log.Debug("ValidateBody failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
 		return err
 	} else {
-        log.Debug("ValidateBody succeeded", "time_elapsed", time.Since(start))
+        log.Debug("ValidateBody succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
     }
 
 	if err := bc.validator.ValidateState(block, statedb, receipts, usedGas); err != nil {
-        log.Debug("ValidateState failed", "time_elapsed", time.Since(start), "error", err)
+        log.Debug("ValidateState failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
 		return err
 	} else {
-        log.Debug("ValidateState succeeded", "time_elapsed", time.Since(start))
+        log.Debug("ValidateState succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
     }
 
 	// First just check the balance delta to see if it matches.
@@ -2594,10 +2595,10 @@ func (bc *BlockChain) ValidatePayload(block *types.Block, feeRecipient common.Ad
 
     err = CheckProposerPayment(expectedProfit, feeRecipient,feeRecipientDiff, receipts, block)
     if err != nil {
-        log.Debug("CheckProposerPayment failed", "time_elapsed", time.Since(start), "error", err)
+        log.Debug("CheckProposerPayment failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
         return err
     } else {
-        log.Debug("CheckProposerPayment succeeded", "time_elapsed", time.Since(start))
+        log.Debug("CheckProposerPayment succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
     }
 
 	return nil
