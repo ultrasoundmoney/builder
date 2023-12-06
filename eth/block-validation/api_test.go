@@ -1,7 +1,6 @@
 package blockvalidation
 
 import (
-	"encoding/json"
 	"errors"
 	"math/big"
 	"os"
@@ -25,7 +24,6 @@ import (
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
-	"github.com/ethereum/go-ethereum/eth/tracers/logger"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -59,7 +57,7 @@ func TestValidateBuilderSubmissionV1(t *testing.T) {
 	ethservice.Merger().ReachTTD()
 	defer n.Close()
 
-	api := NewBlockValidationAPI(ethservice, nil)
+	api := NewBlockValidationAPI(ethservice)
 	parent := preMergeBlocks[len(preMergeBlocks)-1]
 
 	api.eth.APIBackend.Miner().SetEtherbase(testValidatorAddr)
@@ -123,25 +121,6 @@ func TestValidateBuilderSubmissionV1(t *testing.T) {
 	blockRequest.ExecutionPayload.GasLimit -= 1
 	updatePayloadHash(t, blockRequest)
 
-	// TODO: test with contract calling blacklisted address
-	// Test tx from blacklisted address
-	api.accessVerifier = &AccessVerifier{
-		blacklistedAddresses: map[common.Address]struct{}{
-			testAddr: {},
-		},
-	}
-	require.ErrorContains(t, api.ValidateBuilderSubmissionV1(blockRequest), "transaction from blacklisted address 0x71562b71999873DB5b286dF957af199Ec94617F7")
-
-	// Test tx to blacklisted address
-	api.accessVerifier = &AccessVerifier{
-		blacklistedAddresses: map[common.Address]struct{}{
-			{0x16}: {},
-		},
-	}
-	require.ErrorContains(t, api.ValidateBuilderSubmissionV1(blockRequest), "transaction to blacklisted address 0x1600000000000000000000000000000000000000")
-
-	api.accessVerifier = nil
-
 	blockRequest.Message.GasUsed = 10
 	require.ErrorContains(t, api.ValidateBuilderSubmissionV1(blockRequest), "incorrect GasUsed 10, expected 119990")
 	blockRequest.Message.GasUsed = execData.GasUsed
@@ -173,7 +152,7 @@ func TestValidateBuilderSubmissionV2(t *testing.T) {
 	ethservice.Merger().ReachTTD()
 	defer n.Close()
 
-	api := NewBlockValidationAPI(ethservice, nil)
+	api := NewBlockValidationAPI(ethservice)
 	parent := preMergeBlocks[len(preMergeBlocks)-1]
 
 	api.eth.APIBackend.Miner().SetEtherbase(testValidatorAddr)
@@ -234,7 +213,7 @@ func TestValidateBuilderSubmissionV2(t *testing.T) {
 				ProposerFeeRecipient: proposerAddr,
 				GasLimit:             execData.GasLimit,
 				GasUsed:              execData.GasUsed,
-				Value:                uint256.NewInt(0),
+				Value:                uint256.NewInt(149842511727213),
 			},
 			ExecutionPayload: payload,
 		},
@@ -255,25 +234,6 @@ func TestValidateBuilderSubmissionV2(t *testing.T) {
 	blockRequest.Message.GasLimit -= 1
 	blockRequest.ExecutionPayload.GasLimit -= 1
 	updatePayloadHashV2(t, blockRequest)
-
-	// TODO: test with contract calling blacklisted address
-	// Test tx from blacklisted address
-	api.accessVerifier = &AccessVerifier{
-		blacklistedAddresses: map[common.Address]struct{}{
-			testAddr: {},
-		},
-	}
-	require.ErrorContains(t, api.ValidateBuilderSubmissionV2(blockRequest), "transaction from blacklisted address 0x71562b71999873DB5b286dF957af199Ec94617F7")
-
-	// Test tx to blacklisted address
-	api.accessVerifier = &AccessVerifier{
-		blacklistedAddresses: map[common.Address]struct{}{
-			{0x16}: {},
-		},
-	}
-	require.ErrorContains(t, api.ValidateBuilderSubmissionV2(blockRequest), "transaction to blacklisted address 0x1600000000000000000000000000000000000000")
-
-	api.accessVerifier = nil
 
 	blockRequest.Message.GasUsed = 10
 	require.ErrorContains(t, api.ValidateBuilderSubmissionV2(blockRequest), "incorrect GasUsed 10, expected 119996")
@@ -392,48 +352,6 @@ func assembleBlock(api *BlockValidationAPI, parentHash common.Hash, params *engi
 	}
 
 	return nil, errors.New("payload did not resolve")
-}
-
-func TestBlacklistLoad(t *testing.T) {
-	file, err := os.CreateTemp(".", "blacklist")
-	require.NoError(t, err)
-	defer os.Remove(file.Name())
-
-	av, err := NewAccessVerifierFromFile(file.Name())
-	require.Error(t, err)
-	require.Nil(t, av)
-
-	ba := BlacklistedAddresses{common.Address{0x13}, common.Address{0x14}}
-	bytes, err := json.MarshalIndent(ba, "", " ")
-	require.NoError(t, err)
-	err = os.WriteFile(file.Name(), bytes, 0644)
-	require.NoError(t, err)
-
-	av, err = NewAccessVerifierFromFile(file.Name())
-	require.NoError(t, err)
-	require.NotNil(t, av)
-	require.EqualValues(t, av.blacklistedAddresses, map[common.Address]struct{}{
-		{0x13}: {},
-		{0x14}: {},
-	})
-
-	require.NoError(t, av.verifyTraces(logger.NewAccessListTracer(nil, common.Address{}, common.Address{}, nil)))
-
-	acl := types.AccessList{
-		types.AccessTuple{
-			Address: common.Address{0x14},
-		},
-	}
-	tracer := logger.NewAccessListTracer(acl, common.Address{}, common.Address{}, nil)
-	require.ErrorContains(t, av.verifyTraces(tracer), "blacklisted address 0x1400000000000000000000000000000000000000 in execution trace")
-
-	acl = types.AccessList{
-		types.AccessTuple{
-			Address: common.Address{0x15},
-		},
-	}
-	tracer = logger.NewAccessListTracer(acl, common.Address{}, common.Address{}, nil)
-	require.NoError(t, av.verifyTraces(tracer))
 }
 
 func ExecutableDataToExecutionPayload(data *engine.ExecutableData) (*boostTypes.ExecutionPayload, error) {

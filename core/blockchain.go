@@ -49,6 +49,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/google/uuid"
 )
 
 var (
@@ -2494,31 +2495,46 @@ func (bc *BlockChain) SetBlockValidatorAndProcessorForTesting(v Validator, p Pro
 	bc.processor = p
 }
 
-func (bc *BlockChain) ValidatePayload(block *types.Block, feeRecipient common.Address, expectedProfit *big.Int, registeredGasLimit uint64, vmConfig vm.Config) error {
+func (bc *BlockChain) ValidatePayload(block *types.Block, feeRecipient common.Address, expectedProfit *big.Int, registeredGasLimit uint64, vmConfig vm.Config, start time.Time, requestId uuid.UUID) error {
 	header := block.Header()
 	if err := bc.engine.VerifyHeader(bc, header, true); err != nil {
+		log.Debug("VerifyHeader failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
 		return err
+	} else {
+		log.Debug("VerifyHeader succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
 	}
 
 	current := bc.CurrentBlock()
 	reorg, err := bc.forker.ReorgNeeded(current, header)
 	if err == nil && reorg {
+		log.Debug("ReorgNeeded failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
 		return errors.New("block requires a reorg")
+	} else {
+		log.Debug("ReorgNeeded succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
 	}
 
 	parent := bc.GetHeader(block.ParentHash(), block.NumberU64()-1)
 	if parent == nil {
+		log.Debug("GetHeader(Parent) failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
 		return errors.New("parent not found")
+	} else {
+		log.Debug("GetHeader(Parent) succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
 	}
 
-	calculatedGasLimit := utils.CalcGasLimit(parent.GasLimit, registeredGasLimit)
-	if calculatedGasLimit != header.GasLimit {
-		return errors.New("incorrect gas limit set")
+	err = CheckGasLimit(parent.GasLimit, registeredGasLimit, header.GasLimit)
+	if err != nil {
+		log.Debug("CheckGasLimit failed", "time_elapsed", time.Since(start), "error", err)
+		return err
+	} else {
+		log.Debug("CheckGasLimit succeeded", "time_elapsed", time.Since(start))
 	}
 
 	statedb, err := bc.StateAt(parent.Root)
 	if err != nil {
+		log.Debug("StateAt(parent.Root) failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
 		return err
+	} else {
+		log.Debug("StateAt(parent.Root) succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
 	}
 
 	// The chain importer is starting and stopping trie prefetchers. If a bad
@@ -2527,33 +2543,90 @@ func (bc *BlockChain) ValidatePayload(block *types.Block, feeRecipient common.Ad
 	// and dangling prefetcher, without defering each and holding on live refs.
 	defer statedb.StopPrefetcher()
 
+	balanceBefore := statedb.GetBalance(feeRecipient)
+
 	receipts, _, usedGas, err := bc.processor.Process(block, statedb, vmConfig)
 	if err != nil {
+		log.Debug("Execute transactions failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
 		return err
+	} else {
+		log.Debug("Execute transactions succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
 	}
 
+	err = nil
 	if bc.Config().IsShanghai(header.Time) {
 		if header.WithdrawalsHash == nil {
-			return fmt.Errorf("withdrawals hash is missing")
+			err = fmt.Errorf("withdrawals hash is missing")
 		}
 		// withdrawals hash and withdrawals validated later in ValidateBody
 	} else {
 		if header.WithdrawalsHash != nil {
-			return fmt.Errorf("withdrawals hash present before shanghai")
+			err = fmt.Errorf("withdrawals hash present before shanghai")
 		}
 		if block.Withdrawals() != nil {
-			return fmt.Errorf("withdrawals list present in block body before shanghai")
+			err = fmt.Errorf("withdrawals list present in block body before shanghai")
 		}
+	}
+	if err != nil {
+		log.Debug("Check Withdrawal hash failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
+		return err
+	} else {
+		log.Debug("Check Withdrawal hash succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
 	}
 
 	if err := bc.validator.ValidateBody(block); err != nil {
+		log.Debug("ValidateBody failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
 		return err
+	} else {
+		log.Debug("ValidateBody succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
 	}
 
 	if err := bc.validator.ValidateState(block, statedb, receipts, usedGas); err != nil {
+		log.Debug("ValidateState failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
 		return err
+	} else {
+		log.Debug("ValidateState succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
 	}
 
+	// First just check the balance delta to see if it matches.
+	balanceAfter := statedb.GetBalance(feeRecipient)
+	feeRecipientDiff := new(big.Int).Sub(balanceAfter, balanceBefore)
+
+	err = CheckProposerPayment(expectedProfit, feeRecipient, feeRecipientDiff, receipts, block)
+	if err != nil {
+		log.Debug("CheckProposerPayment failed", "time_elapsed", time.Since(start), "error", err, "requestId", requestId)
+		return err
+	} else {
+		log.Debug("CheckProposerPayment succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
+	}
+
+	return nil
+}
+
+func CheckGasLimit(parentGasLimit uint64, registeredGasLimit uint64, headerGasLimit uint64) error {
+	if registeredGasLimit == 0 && headerGasLimit == utils.CalcGasLimit(parentGasLimit, 30_000_000) {
+		// Prysm has a bug where it registers validators with a desired gas limit
+		// of 0. Some builders treat these as desiring gas limit 30_000_000. As a
+		// workaround, whenever the desired gas limit is 0, we accept both the
+		// limit as calculated with a desired limit of 0, and builders which fall
+		// back to calculating with the default 30_000_000.
+	} else {
+		calculatedGasLimit := utils.CalcGasLimit(parentGasLimit, registeredGasLimit)
+		if calculatedGasLimit != headerGasLimit {
+			return fmt.Errorf("incorrect gas limit set, expected: %d, got: %d", calculatedGasLimit, headerGasLimit)
+		}
+	}
+	return nil
+}
+
+func CheckProposerPayment(expectedProfit *big.Int, feeRecipient common.Address, feeRecipientDiff *big.Int, receipts types.Receipts, block *types.Block) error {
+	// If diff is sufficiently large, just return success.
+	if feeRecipientDiff.Cmp(expectedProfit) >= 0 {
+		return nil
+	}
+	log.Warn(fmt.Sprintf("fee recipient diff %s is less than expected %s. checking for last transaction", feeRecipientDiff.String(), expectedProfit.String()))
+
+	// Flashbots logic for last transaction checks.
 	if len(receipts) == 0 {
 		return errors.New("no proposer payment receipt")
 	}
@@ -2596,7 +2669,6 @@ func (bc *BlockChain) ValidatePayload(block *types.Block, feeRecipient common.Ad
 	if paymentTx.GasFeeCap().Cmp(block.BaseFee()) != 0 {
 		return fmt.Errorf("malformed proposer payment, unexpected gas fee cap")
 	}
-
 	return nil
 }
 
