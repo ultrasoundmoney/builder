@@ -152,10 +152,10 @@ func (api *BlockValidationAPI) ValidateBuilderSubmissionV2(params *BuilderBlockV
 	payload := params.ExecutionPayload
 	block, err := engine.ExecutionPayloadV2ToBlock(payload)
 	if err != nil {
-		log.Debug("Block parsing failed", "time_elapsed", time.Since(start), "requestId", requestId)
+		log.Debug("Block parsing failed", "time_elapsed", time.Since(start).Microseconds(), "requestId", requestId)
 		return err
 	} else {
-		log.Debug("Block parsing succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
+		log.Debug("Block parsing succeeded", "time_elapsed", time.Since(start).Microseconds(), "requestId", requestId)
 	}
 
 	// validated at the relay
@@ -166,10 +166,10 @@ func (api *BlockValidationAPI) ValidateBuilderSubmissionV2(params *BuilderBlockV
 
 	err = CompareMessageAndBlock(params, block)
 	if err != nil {
-		log.Debug("Message / Payload comparison failed", "time_elapsed", time.Since(start), "requestId", requestId)
+		log.Debug("Message / Payload comparison failed", "time_elapsed", time.Since(start).Microseconds(), "requestId", requestId)
 		return err
 	} else {
-		log.Debug("Message / Payload comparison succeeded", "time_elapsed", time.Since(start), "requestId", requestId)
+		log.Debug("Message / Payload comparison succeeded", "time_elapsed", time.Since(start).Microseconds(), "requestId", requestId)
 	}
 
 	feeRecipient := common.BytesToAddress(params.Message.ProposerFeeRecipient[:])
@@ -181,6 +181,6 @@ func (api *BlockValidationAPI) ValidateBuilderSubmissionV2(params *BuilderBlockV
 		return err
 	}
 
-	log.Info("validated block", "hash", block.Hash(), "number", block.NumberU64(), "parentHash", block.ParentHash(), "time_elapsed", time.Since(start), "requestId", requestId)
+	log.Info("validated block", "hash", block.Hash(), "number", block.NumberU64(), "parentHash", block.ParentHash(), "time_elapsed", time.Since(start).Microseconds(), "requestId", requestId)
 	return nil
 }
